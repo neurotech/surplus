@@ -8,10 +8,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "cli": "tsx bin/surplus.ts",
     "dev": "tsx bin/surplus.ts",
     "lint": "biome check src/ bin/",
     "lint:fix": "biome check --write src/ bin/",
     "prepack": "pnpm run build",
+    "start": "node dist/bin/surplus.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
