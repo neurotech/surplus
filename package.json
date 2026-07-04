@@ -4,12 +4,15 @@
   "description": "WoW Addon Manager CLI for Linux",
   "type": "module",
   "bin": {
-    "surplus": "./bin/surplus.ts"
+    "surplus": "./dist/bin/surplus.js"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx bin/surplus.ts",
     "lint": "biome check src/ bin/",
     "lint:fix": "biome check --write src/ bin/",
+    "prepack": "pnpm run build",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +26,7 @@
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
   }
 }

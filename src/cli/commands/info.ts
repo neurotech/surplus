@@ -3,14 +3,19 @@ import { scanAddons } from "../../addons/manager.js";
 import type { WowFlavor } from "../../addons/types.js";
 import { loadConfig, validateConfig } from "../../config/index.js";
 import { detectFlavors } from "../../utils/paths.js";
+import { parseFlavor } from "../flavor.js";
 import { error, heading, pc, warn } from "../ui.js";
 
 export function registerInfoCommand(program: Command): void {
   program
     .command("info <addon>")
     .description("Show detailed metadata for an installed addon")
-    .option("-f, --flavor <flavor>", "WoW flavor (retail or classic)")
-    .action(async (addon: string, opts: { flavor?: string }) => {
+    .option(
+      "-f, --flavor <flavor>",
+      "WoW flavor (retail or classic)",
+      parseFlavor,
+    )
+    .action(async (addon: string, opts: { flavor?: WowFlavor }) => {
       const config = loadConfig();
       const errors = validateConfig(config);
       if (errors.length > 0) {
@@ -20,7 +25,7 @@ export function registerInfoCommand(program: Command): void {
       }
 
       const flavors: WowFlavor[] = opts.flavor
-        ? [opts.flavor as WowFlavor]
+        ? [opts.flavor]
         : detectFlavors(config.wow_path);
 
       let found = false;

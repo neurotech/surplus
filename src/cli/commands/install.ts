@@ -6,6 +6,7 @@ import { loadConfig, validateConfig } from "../../config/index.js";
 import { CurseForgeSource } from "../../sources/curseforge.js";
 import { GitHubSource, parseGitHubUrl } from "../../sources/github.js";
 import { detectFlavors } from "../../utils/paths.js";
+import { parseFlavor } from "../flavor.js";
 import { error, info, pc, spinner, success, table, warn } from "../ui.js";
 
 export function registerInstallCommand(program: Command): void {
@@ -14,8 +15,12 @@ export function registerInstallCommand(program: Command): void {
     .description(
       "Install an addon from CurseForge (search query) or GitHub (URL)",
     )
-    .option("-f, --flavor <flavor>", "WoW flavor (retail or classic)")
-    .action(async (query: string, opts: { flavor?: string }) => {
+    .option(
+      "-f, --flavor <flavor>",
+      "WoW flavor (retail or classic)",
+      parseFlavor,
+    )
+    .action(async (query: string, opts: { flavor?: WowFlavor }) => {
       const config = loadConfig();
       const errors = validateConfig(config);
       if (errors.length > 0) {
@@ -25,9 +30,7 @@ export function registerInstallCommand(program: Command): void {
       }
 
       const flavor: WowFlavor =
-        (opts.flavor as WowFlavor) ||
-        detectFlavors(config.wow_path)[0] ||
-        "retail";
+        opts.flavor ?? detectFlavors(config.wow_path)[0] ?? "retail";
 
       const ghParsed = parseGitHubUrl(query);
 

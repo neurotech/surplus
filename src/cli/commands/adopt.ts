@@ -6,6 +6,7 @@ import type { WowFlavor } from "../../addons/types.js";
 import { loadConfig, validateConfig } from "../../config/index.js";
 import { CurseForgeSource } from "../../sources/curseforge.js";
 import { detectFlavors } from "../../utils/paths.js";
+import { parseFlavor } from "../flavor.js";
 import { error, info, pc, spinner, success, table, warn } from "../ui.js";
 
 interface AdoptableGroup {
@@ -21,11 +22,15 @@ export function registerAdoptCommand(program: Command): void {
     .description(
       "Adopt untracked addons with CurseForge project IDs into surplus tracking",
     )
-    .option("-f, --flavor <flavor>", "WoW flavor (retail or classic)")
+    .option(
+      "-f, --flavor <flavor>",
+      "WoW flavor (retail or classic)",
+      parseFlavor,
+    )
     .option("-a, --all", "Adopt all without prompting")
     .option("-n, --dry-run", "Show adoptable addons without making changes")
     .action(
-      async (opts: { flavor?: string; all?: boolean; dryRun?: boolean }) => {
+      async (opts: { flavor?: WowFlavor; all?: boolean; dryRun?: boolean }) => {
         const config = loadConfig();
         const errors = validateConfig(config);
         if (errors.length > 0) {
@@ -35,7 +40,7 @@ export function registerAdoptCommand(program: Command): void {
         }
 
         const flavors: WowFlavor[] = opts.flavor
-          ? [opts.flavor as WowFlavor]
+          ? [opts.flavor]
           : detectFlavors(config.wow_path);
 
         if (flavors.length === 0) {

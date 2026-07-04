@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import type { WowFlavor } from "../../addons/types.js";
 import { loadConfig, validateConfig } from "../../config/index.js";
 import { CurseForgeSource } from "../../sources/curseforge.js";
+import { parseFlavor } from "../flavor.js";
 import { error, heading, pc, spinner, table } from "../ui.js";
 
 function formatDownloads(count: number): string {
@@ -14,8 +15,12 @@ export function registerSearchCommand(program: Command): void {
   program
     .command("search <query>")
     .description("Search CurseForge for addons")
-    .option("-f, --flavor <flavor>", "Filter by flavor (retail or classic)")
-    .action(async (query: string, opts: { flavor?: string }) => {
+    .option(
+      "-f, --flavor <flavor>",
+      "Filter by flavor (retail or classic)",
+      parseFlavor,
+    )
+    .action(async (query: string, opts: { flavor?: WowFlavor }) => {
       const config = loadConfig();
       const errors = validateConfig(config);
       if (errors.length > 0) {
@@ -28,10 +33,7 @@ export function registerSearchCommand(program: Command): void {
 
       try {
         const cf = new CurseForgeSource(config.curseforge_api_key);
-        const results = await cf.search(
-          query,
-          opts.flavor as WowFlavor | undefined,
-        );
+        const results = await cf.search(query, opts.flavor);
 
         s.success({ text: `Found ${results.length} results` });
 

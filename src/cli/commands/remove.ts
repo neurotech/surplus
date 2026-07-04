@@ -5,14 +5,19 @@ import { loadTrackedAddons } from "../../addons/tracker.js";
 import type { WowFlavor } from "../../addons/types.js";
 import { loadConfig, validateConfig } from "../../config/index.js";
 import { detectFlavors } from "../../utils/paths.js";
+import { parseFlavor } from "../flavor.js";
 import { error, info, pc, success, warn } from "../ui.js";
 
 export function registerRemoveCommand(program: Command): void {
   program
     .command("remove <addon>")
     .description("Remove an addon and its tracking entry")
-    .option("-f, --flavor <flavor>", "WoW flavor (retail or classic)")
-    .action(async (addon: string, opts: { flavor?: string }) => {
+    .option(
+      "-f, --flavor <flavor>",
+      "WoW flavor (retail or classic)",
+      parseFlavor,
+    )
+    .action(async (addon: string, opts: { flavor?: WowFlavor }) => {
       const config = loadConfig();
       const errors = validateConfig(config);
       if (errors.length > 0) {
@@ -22,7 +27,7 @@ export function registerRemoveCommand(program: Command): void {
       }
 
       const flavors: WowFlavor[] = opts.flavor
-        ? [opts.flavor as WowFlavor]
+        ? [opts.flavor]
         : detectFlavors(config.wow_path);
 
       const tracked = loadTrackedAddons();

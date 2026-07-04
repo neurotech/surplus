@@ -6,6 +6,7 @@ import { loadConfig, validateConfig } from "../../config/index.js";
 import { CurseForgeSource } from "../../sources/curseforge.js";
 import { GitHubSource } from "../../sources/github.js";
 import { detectFlavors } from "../../utils/paths.js";
+import { parseFlavor } from "../flavor.js";
 import {
   error,
   heading,
@@ -22,10 +23,14 @@ export function registerUpdateCommand(program: Command): void {
     .command("update")
     .description("Check and apply addon updates")
     .option("-a, --all", "Update all addons without prompting")
-    .option("-f, --flavor <flavor>", "Filter by flavor (retail or classic)")
+    .option(
+      "-f, --flavor <flavor>",
+      "Filter by flavor (retail or classic)",
+      parseFlavor,
+    )
     .option("-d, --dry-run", "Check for updates without installing")
     .action(
-      async (opts: { all?: boolean; flavor?: string; dryRun?: boolean }) => {
+      async (opts: { all?: boolean; flavor?: WowFlavor; dryRun?: boolean }) => {
         const config = loadConfig();
         const errors = validateConfig(config);
         if (errors.length > 0) {
@@ -35,7 +40,7 @@ export function registerUpdateCommand(program: Command): void {
         }
 
         const flavors: WowFlavor[] = opts.flavor
-          ? [opts.flavor as WowFlavor]
+          ? [opts.flavor]
           : detectFlavors(config.wow_path);
 
         const sources = {
@@ -49,39 +54,73 @@ export function registerUpdateCommand(program: Command): void {
           const s = spinner("Checking for updates...").start();
 
           try {
-            const updates = await checkUpdates(config, flavor, sources);
+            const { updates, failures } = await checkUpdates(
+              config,
+              flavor,
+              sources,
+            );
 
-            if (updates.length === 0) {
+            if (updates.length === 0 && failures.length === 0) {
               s.success({ text: "All addons are up to date!" });
               continue;
             }
 
-            s.success({
-              text: `Found ${updates.length} update${updates.length > 1 ? "s" : ""}`,
-            });
-
-            const rows: string[][] = [
-              [
-                pc.bold("Name"),
-                pc.bold("Current"),
-                pc.bold("Latest"),
-                pc.bold("Source"),
-              ],
-            ];
-
-            for (const u of updates) {
-              rows.push([
-                u.name,
-                u.currentVersion,
-                pc.green(u.latestVersion),
-                u.tracked.source,
-              ]);
+            if (updates.length > 0) {
+              s.success({
+                text: `Found ${updates.length} update${updates.length > 1 ? "s" : ""}`,
+              });
+            } else {
+              s.success({
+                text: "No updates found for successfully checked addons",
+              });
             }
 
-            table(rows);
+            if (updates.length > 0) {
+              const rows: string[][] = [
+                [
+                  pc.bold("Name"),
+                  pc.bold("Current"),
+                  pc.bold("Latest"),
+                  pc.bold("Source"),
+                ],
+              ];
+
+              for (const u of updates) {
+                rows.push([
+                  u.name,
+                  u.currentVersion,
+                  pc.green(u.latestVersion),
+                  u.tracked.source,
+                ]);
+              }
+
+              table(rows);
+            }
+
+            if (failures.length > 0) {
+              process.exitCode = 1;
+              warn(
+                `Skipped ${failures.length} addon${failures.length > 1 ? "s" : ""} due to update-check errors:`,
+              );
+              const rows: string[][] = [
+                [pc.bold("Name"), pc.bold("Source"), pc.bold("Error")],
+              ];
+              for (const failure of failures) {
+                rows.push([
+                  failure.name,
+                  failure.source,
+                  failure.error.message,
+                ]);
+              }
+              table(rows);
+            }
 
             if (opts.dryRun) {
               info("Dry run — no changes applied.");
+              continue;
+            }
+
+            if (updates.length === 0) {
               continue;
             }
 
@@ -116,10 +155,15 @@ export function registerUpdateCommand(program: Command): void {
               } catch (err) {
                 us.error({ text: `Failed to update ${u.name}` });
                 error(err instanceof Error ? err.message : String(err));
+                process.exitCode = 1;
               }
             }
 
-            success("Update complete!");
+            if (process.exitCode) {
+              warn("Update completed with errors.");
+            } else {
+              success("Update complete!");
+            }
           } catch (err) {
             s.error({ text: "Update check failed" });
             error(err instanceof Error ? err.message : String(err));

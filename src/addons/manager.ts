@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { SurplusConfig } from "../config/index.js";
 import type { AddonRelease, AddonSource } from "../sources/types.js";
@@ -27,6 +28,17 @@ export interface UpdateInfo {
   release: AddonRelease;
   source: AddonSource;
   tracked: TrackedAddon;
+}
+
+export interface UpdateCheckFailure {
+  name: string;
+  source: TrackedAddon["source"];
+  error: Error;
+}
+
+export interface UpdateCheckResult {
+  updates: UpdateInfo[];
+  failures: UpdateCheckFailure[];
 }
 
 export function scanAddons(
@@ -71,18 +83,32 @@ export async function checkUpdates(
   config: SurplusConfig,
   flavor: WowFlavor,
   sources: { curseforge: AddonSource; github: AddonSource },
-): Promise<UpdateInfo[]> {
+): Promise<UpdateCheckResult> {
   const allTracked = loadTrackedAddons();
   const flavorAddons = allTracked[flavor];
-  if (!flavorAddons) return [];
+  if (!flavorAddons) return { updates: [], failures: [] };
 
   const updates: UpdateInfo[] = [];
+  const failures: UpdateCheckFailure[] = [];
 
   for (const [name, tracked] of Object.entries(flavorAddons)) {
     const source =
       tracked.source === "github" ? sources.github : sources.curseforge;
-    const release = await source.getLatestRelease(tracked.id, flavor);
-    if (!release) continue;
+    let release: AddonRelease | null;
+    try {
+      release = await source.getLatestRelease(tracked.id, flavor);
+    } catch (err) {
+      failures.push({
+        name,
+        source: tracked.source,
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      continue;
+    }
+
+    if (!release) {
+      continue;
+    }
 
     if (release.version !== tracked.version) {
       updates.push({
@@ -96,7 +122,7 @@ export async function checkUpdates(
     }
   }
 
-  return updates;
+  return { updates, failures };
 }
 
 export async function installAddon(
@@ -127,22 +153,55 @@ export async function updateAddon(
   updateInfo: UpdateInfo,
 ): Promise<void> {
   const dir = addonsDir(config.wow_path, flavor);
+  const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), "surplus-update-"));
 
-  for (const folder of updateInfo.tracked.folders) {
-    const folderPath = path.join(dir, folder);
-    if (fs.existsSync(folderPath)) {
-      fs.rmSync(folderPath, { recursive: true });
+  try {
+    const folders = await updateInfo.source.download(
+      updateInfo.release,
+      stagingDir,
+    );
+
+    for (const folder of folders) {
+      const folderPath = path.join(stagingDir, folder);
+      if (!isInside(stagingDir, folderPath) || !fs.existsSync(folderPath)) {
+        throw new Error(`Downloaded addon folder was not found: ${folder}`);
+      }
+      if (!fs.statSync(folderPath).isDirectory()) {
+        throw new Error(`Downloaded addon path is not a folder: ${folder}`);
+      }
     }
+
+    fs.mkdirSync(dir, { recursive: true });
+
+    for (const folder of updateInfo.tracked.folders) {
+      const folderPath = path.join(dir, folder);
+      if (!isInside(dir, folderPath)) {
+        throw new Error(`Unsafe tracked addon folder path: ${folder}`);
+      }
+      if (fs.existsSync(folderPath)) {
+        fs.rmSync(folderPath, { recursive: true });
+      }
+    }
+
+    for (const folder of folders) {
+      const src = path.join(stagingDir, folder);
+      const dest = path.join(dir, folder);
+      if (!isInside(dir, dest)) {
+        throw new Error(`Unsafe downloaded addon folder path: ${folder}`);
+      }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.cpSync(src, dest, { recursive: true });
+    }
+
+    setTrackedAddon(flavor, updateInfo.name, {
+      ...updateInfo.tracked,
+      version: updateInfo.release.version,
+      updated_at: new Date().toISOString(),
+      folders,
+    });
+  } finally {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
-
-  const folders = await updateInfo.source.download(updateInfo.release, dir);
-
-  setTrackedAddon(flavor, updateInfo.name, {
-    ...updateInfo.tracked,
-    version: updateInfo.release.version,
-    updated_at: new Date().toISOString(),
-    folders,
-  });
 }
 
 export function removeAddon(
@@ -164,4 +223,12 @@ export function removeAddon(
 
   removeTrackedAddon(flavor, name);
   return true;
+}
+
+function isInside(root: string, target: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }
