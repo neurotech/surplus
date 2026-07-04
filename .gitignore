@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test and coverage output
+coverage/
+.nyc_output/
+
+# Package manager and runtime logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Tool caches
+.cache/
+.parcel-cache/
+.turbo/
+.vite/
+.vitest/
+.eslintcache
+
+# Runtime/cache files
+.DS_Store
+Thumbs.db
+*.pid
+*.seed
+
+# Editor and local workspace settings
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Local agent/tooling state
+.claude/
